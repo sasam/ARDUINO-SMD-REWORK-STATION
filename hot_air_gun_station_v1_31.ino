@@ -11,6 +11,7 @@
 #include <EEPROM.h>
 #include <SPI.h>
 
+const uint16_t min_working_fan = 100;
 const uint16_t temp_minC   = 100;
 const uint16_t temp_maxC   = 500;
 const uint16_t temp_ambC   = 25;
@@ -296,7 +297,7 @@ uint16_t HOTGUN_CFG::tempHuman(uint16_t temp) {
 
 void HOTGUN_CFG::save(uint16_t temp, uint8_t fanSpeed) {
 	Config.temp      = constrain(temp, min_temp, max_temp);
-	Config.fan          = fanSpeed;
+	Config.fan       = fanSpeed;
 	CONFIG::save();                                    // Save new data into the EEPROM
 }
 
@@ -346,7 +347,7 @@ public:
 	BUZZER(byte buzzerP)    { buzzer_pin = buzzerP; }
 	void init(void);
 	void shortBeep(void)    { tone(buzzer_pin, 3520, 160); }
-	void lowBeep(void)      { tone(buzzer_pin,    880, 160); }
+	void lowBeep(void)      { tone(buzzer_pin,  880, 160); }
 	void doubleBeep(void)   { tone(buzzer_pin, 3520, 160); delay(300); tone(buzzer_pin, 3520, 160); }
 	void failedBeep(void)   { tone(buzzer_pin, 3520, 160); delay(170);
 		tone(buzzer_pin, 880, 250); delay(260);
@@ -527,12 +528,12 @@ void DSPL::setupMode(byte mode) {
 
 void DSPL::msgON(void) {
 	LiquidCrystal_I2C::setCursor(10, 0);
-	LiquidCrystal_I2C::print(F("     ON"));
+	LiquidCrystal_I2C::print(F("    ON"));
 }
 
 void DSPL::msgOFF(void) {
 	LiquidCrystal_I2C::setCursor(10, 0);
-	LiquidCrystal_I2C::print(F("    OFF"));
+	LiquidCrystal_I2C::print(F("   OFF"));
 }
 
 
@@ -543,7 +544,7 @@ void DSPL::msgReady(void) {
 
 void DSPL::msgCold(void) {
 	LiquidCrystal_I2C::setCursor(10, 0);
-	LiquidCrystal_I2C::print(F("   Cold"));
+	LiquidCrystal_I2C::print(F("  Cold"));
 }
 
 void DSPL::msgFail(void) {
@@ -781,7 +782,6 @@ private:
 	const       uint16_t    min_fan_speed   = 30;
 	const       uint16_t    max_fan_speed   = 255;
 	const       uint16_t    max_cool_fan    = 220;
-	const       uint16_t    min_working_fan = 100;
 	const       uint16_t    temp_gun_cold   = 20; 
 };
 
@@ -1119,7 +1119,7 @@ SCREEN* mainSCREEN::show(void) {
 SCREEN* mainSCREEN::menu(void) {
 	if (mode_temp) {                                      // Prepare to adjust the fan speed
 		uint8_t  fs = pHG->getFanSpeed();
-		pEnc->reset(fs, 0, 255, 5, 20);
+		pEnc->reset(fs, min_working_fan, 255, 5, 20);
 		mode_temp = false;
 	} else {                                              // Prepare to adjust the preset temperature
 		uint16_t temp_set = pHG->getTemp();
@@ -1165,7 +1165,7 @@ private:
 
 void workSCREEN::init(void) {
 	uint8_t fs = pHG->getFanSpeed();
-	pEnc->reset(fs, 0, 255, 5, 20);
+	pEnc->reset(fs, min_working_fan, 255, 5, 20);
 	mode_temp   = false;                            // By default adjust the fan speed
 	pHG->switchPower(true);
 	ready = false;
@@ -1216,7 +1216,7 @@ SCREEN* workSCREEN::show(void) {
 SCREEN* workSCREEN::menu(void) {
 	if (mode_temp) {
 		uint8_t  fs = pHG->getFanSpeed();
-		pEnc->reset(fs, 0, 255, 5, 20);
+		pEnc->reset(fs, min_working_fan, 255, 5, 20);
 		mode_temp = false;
 	} else {
 		uint16_t temp_set = pHG->getTemp();
@@ -1729,6 +1729,7 @@ errorSCREEN  errScr(&hg,  &disp, &simpleBuzzer);
 pidSCREEN    pidScr(&hg,  &rotEncoder);
 
 SCREEN   *pCurrentScreen = &offScr;
+// SCREEN   *pCurrentScreen = &pidScr;
 
 volatile bool  end_of_power_period = false;
 
@@ -1741,7 +1742,7 @@ void rotEncChange(void) {
 }
 
 void setup() {
-	Serial.begin(115200);
+   Serial.begin(57600);
 	disp.init();
 
 	// Activate internal 1.1V voltage reference for ADC
