@@ -325,7 +325,7 @@ void HOTGUN_CFG::saveCalibrationData(uint16_t tip[3]) {
 	cd |= tip[0];
 	Config.calibration = cd;
 	t_tip[0] = tip[0];
-	t_tip[2] = tip[1];
+	t_tip[1] = tip[1];
 	t_tip[2] = tip[2];
 }
 
