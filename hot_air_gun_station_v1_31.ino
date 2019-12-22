@@ -325,7 +325,7 @@ void HOTGUN_CFG::saveCalibrationData(uint16_t tip[3]) {
 	cd |= tip[0];
 	Config.calibration = cd;
 	t_tip[0] = tip[0];
-	t_tip[2] = tip[1];
+	t_tip[1] = tip[1];
 	t_tip[2] = tip[2];
 }
 
@@ -339,6 +339,8 @@ void HOTGUN_CFG::setDefaults(bool Write) {
 	if (Write) {
 		CONFIG::save();
 	}
+	for (uint8_t i = 0; i < 3; ++i)
+		t_tip[i] = def_tip[i];
 }
 
 //------------------------------------------ class BUZZER ------------------------------------------------------
@@ -382,7 +384,7 @@ public:
 	void  msgFail(void);                                  // Show 'Fail' message
 	void  msgTune(void);                                  // Show 'Tune' message
 private:
-	bool  full_second_line;                               // Whether the second line is full with the message
+	// bool  full_second_line;                               // Whether the second line is full with the message
 	char  temp_units;
 	const uint8_t custom_symbols[3][8] = {
 		{ 0b00110,                                         // Degree
@@ -421,7 +423,7 @@ void DSPL::init(void) {
 	LiquidCrystal_I2C::clear();
 	for (uint8_t i = 0; i < 3; ++i)
 		LiquidCrystal_I2C::createChar(i+1, (uint8_t *)custom_symbols[i]);
-	full_second_line = false;
+	// full_second_line = false;
 	temp_units = 'C';
 }
 
@@ -447,10 +449,10 @@ void DSPL::tCurr(uint16_t t) {
 		return;
 	}
 	LiquidCrystal_I2C::print(buff);
-	if (full_second_line) {
-		LiquidCrystal_I2C::print(F("          "));
-		full_second_line = false;
-	}
+	// if (full_second_line) {
+		// LiquidCrystal_I2C::print(F("          "));
+		// full_second_line = false;
+	// }
 }
 
 void DSPL::tInternal(uint16_t t) {
@@ -463,10 +465,10 @@ void DSPL::tInternal(uint16_t t) {
 		return;
 	}
 	LiquidCrystal_I2C::print(buff);
-	if (full_second_line) {
-		LiquidCrystal_I2C::print(F("          "));
-		full_second_line = false;
-	}
+	// if (full_second_line) {
+		// LiquidCrystal_I2C::print(F("          "));
+		// full_second_line = false;
+	// }
 }
 
 void DSPL::tReal(uint16_t t) {
@@ -1132,7 +1134,7 @@ SCREEN* mainSCREEN::menu(void) {
 
 SCREEN* mainSCREEN::reedSwitch(bool on) {
 	if (on && this->on)
-	return this->on;
+		return this->on;
 	return this; 
 }
 
@@ -1229,7 +1231,7 @@ SCREEN* workSCREEN::menu(void) {
 
 SCREEN* workSCREEN::reedSwitch(bool on) {
 	if (!on && next)
-	return next;
+		return next;
 	return this; 
 }
 
@@ -1325,6 +1327,7 @@ void configSCREEN::rotaryValue(int16_t value) {
 //---------------------------------------- class calibSCREEN [ tip calibration ] -------------------------------
 class calibSCREEN : public SCREEN {
 public:
+	typedef enum { OFF, ON, READY } EncMod;
 	calibSCREEN(HOTGUN* HG, DSPL* DSP, ENCODER* Enc, BUZZER* Buzz, HOTGUN_CFG* Cfg) {
 		pHG   = HG;
 		pD    = DSP;
@@ -1352,36 +1355,69 @@ private:
 	bool            tune;                              // Whether the parameter is modifiying
 	const uint32_t  period   = 1000;                   // Update screen period
 	const uint16_t  temp_max = 900;
+	EncMod 			 enc_mode = OFF;
 };
 
 void calibSCREEN::init(void) {
-	mode = 0;
-	pEnc->reset(mode, 0, 2, 1, 0, true);         // Select the reference temperature: 0 - temp_tip[0], 1 - temp_tip[1], 2 - temp_tip[2]
-	pHG->switchPower(false);
-	tune  = false;
-	ready = false;
-	for (uint8_t i = 0; i < 3; ++i)
-	calib_temp[0][i] = temp_tip[i];
-	pCfg->getCalibrationData(&calib_temp[1][0]);
-	pD->clear();
-	pD->msgOFF();
-	uint16_t temp = temp_tip[mode];
-	preset_temp = pHG->getTemp();                // Preset Temp in internal units
-	preset_temp = pCfg->tempHuman(preset_temp);  // Save the preset temperature in Celsius
-	uint16_t temp_set = pCfg->tempInternal(temp);
-	pHG->setTemp(temp_set);
-	forceRedraw(); 
+	// mode = 0; enc_mode = OFF;
+	// pEnc->reset(mode, 0, 2, 1, 0, true);         // Select the reference temperature: 0 - temp_tip[0], 1 - temp_tip[1], 2 - temp_tip[2]
+	// pHG->switchPower(false);
+	// tune  = false;
+	// ready = false;
+	// for (uint8_t i = 0; i < 3; ++i)
+		// calib_temp[0][i] = temp_tip[i];
+	// pCfg->getCalibrationData(&calib_temp[1][0]);
+	// pD->clear();
+	// pD->msgOFF();
+	// uint16_t temp = temp_tip[mode];
+	// preset_temp = pHG->getTemp();                // Preset Temp in internal units
+	// preset_temp = pCfg->tempHuman(preset_temp);  // Save the preset temperature in Celsius
+	// uint16_t temp_set = pCfg->tempInternal(temp);
+	// pHG->setTemp(temp_set);
+	// forceRedraw(); 
+	
+	switch(enc_mode) {
+	case OFF:  // select the temperature to be calibrated, t_min, t_mid or t_max
+		mode = 0; enc_mode = OFF;
+		pEnc->reset(mode, 0, 2, 1, 0, true);         // Select the reference temperature: 0 - temp_tip[0], 1 - temp_tip[1], 2 - temp_tip[2]
+		pHG->switchPower(false);
+		tune  = false;
+		ready = false;
+		for (uint8_t i = 0; i < 3; ++i)
+			calib_temp[0][i] = temp_tip[i];
+		pCfg->getCalibrationData(&calib_temp[1][0]);
+		pD->clear();
+		pD->msgOFF();
+		uint16_t temp = temp_tip[mode];
+		preset_temp = pHG->getTemp();                // Preset Temp in internal units
+		preset_temp = pCfg->tempHuman(preset_temp);  // Save the preset temperature in Celsius
+		uint16_t temp_set = pCfg->tempInternal(temp);
+		pHG->setTemp(temp_set);
+		forceRedraw();
+		break;
+	case ON:  // adjust FAN speed
+		break;
+	case READY:	
+		break;
+	}
 }
 
 SCREEN* calibSCREEN::show(void) {
 	if (millis() < update_screen) return this;
 	update_screen      = millis() + period;
 	int temp           = pHG->tempAverage();     // The Hot gun average value of the current temp. (internal)
-	int temp_set       = pHG->getTemp();         // The preset 
+	int temp_set       = pHG->getTemp();         // The preset (internal units)
 	uint16_t tempH     = pCfg->tempHuman(temp);
-	uint16_t temp_setH = pCfg->tempHuman(temp_set);
-	pD->tSet(temp_setH);
+	// uint16_t temp_setH = pCfg->tempHuman(temp_set);
+	// pD->tSet(temp_setH);
+	pD->tSet(calib_temp[0][mode]);
 	pD->tCurr(tempH);
+
+	// char buff[40];
+	// sprintf(buff, "%d%d%d| 0: %3d %3d %3d",tune,ready,mode, calib_temp[0][0], calib_temp[0][1],calib_temp[0][2]);
+	// Serial.println(buff);
+	// sprintf(buff, "%3d| 1: %3d %3d %3d", calib_temp[0][mode], calib_temp[1][0], calib_temp[1][1],calib_temp[1][2]);
+	// Serial.println(buff);
 
 	uint8_t p = pHG->appliedPower();
 	if (!pHG->isOn()) p = 0;
@@ -1391,13 +1427,14 @@ SCREEN* calibSCREEN::show(void) {
 			pBz->shortBeep();
 			pD->msgReady();
 			ready = true;
+			enc_mode = READY; //sasa
 		}
 	}
 	if (ready) {
 		pD->tReal(pEnc->read());
 	} else {
 		if (pHG->isOn())
-		pD->fanSpeed(pHG->getFanSpeed());
+			pD->fanSpeed(pHG->getFanSpeed());
 	}
 	if (tune && !pHG->isOn()) {         // The hot gun was switched off by error
 		pD->msgOFF();
@@ -1408,19 +1445,37 @@ SCREEN* calibSCREEN::show(void) {
 }
 
 void calibSCREEN::rotaryValue(int16_t value) {
-	update_screen = millis() + period;
-	if (!tune) {                        // select the temperature to be calibrated, t_min, t_mid or t_max
+	Serial.print(enc_mode); Serial.print(":");	
+	switch(enc_mode) {
+	case OFF:  // select the temperature to be calibrated, t_min, t_mid or t_max
 		mode = value;
 		if (mode > 2) mode = 2;
 		uint16_t temp = temp_tip[mode];
 		temp = pCfg->tempInternal(temp);
-		pHG->setTemp(temp);
+		pHG->setTemp(temp);	
+		Serial.print("OFF ");
+		break;
+	case ON:  // adjust FAN speed
+		pHG->setFanSpeed(value);
+		pD->fanSpeed(pHG->getFanSpeed());
+		Serial.print("ON ");
+		break;
+	case READY:	// Calibration point selected
+		pD->tReal(value);
+		Serial.print("READY ");
+		break;
+	default:
+		Serial.print("XXXXX ");
 	}
+	Serial.print(enc_mode); Serial.print(":");
+	Serial.println(value);
 	forceRedraw();
 }
 
-SCREEN* calibSCREEN::menu(void) { 
-	if (tune) {                                     // Calibrated value for the temperature limit jus has been setup
+SCREEN* calibSCREEN::menu(void) {
+Serial.print(enc_mode); Serial.print(" ");	
+	switch(enc_mode) {
+	case OFF:  // Calibrated value for the temperature limit jus has been setup
 		tune = false;
 		calib_temp[0][mode] = pEnc->read();          // Real temperature (Celsius)
 		calib_temp[1][mode] = pHG->tempAverage();    // The temperature on the hot gun
@@ -1430,15 +1485,31 @@ SCREEN* calibSCREEN::menu(void) {
 		uint16_t tip[3];
 		buildCalibration(tip);
 		pCfg->applyCalibrationData(tip);
-	} else {                                        // Calibration point selected
+		enc_mode = ON;
+	Serial.print("OFF ");
+		break;	
+	case ON:  // adjust FAN speed
 		tune = true;
-		uint16_t temp = temp_tip[mode];
-		pEnc->reset(temp, 40, 600, 1, 5);
+		uint8_t  fs = pHG->getFanSpeed();
+		pEnc->reset(fs, min_working_fan, 255, 5, 20);
 		temp = pCfg->tempInternal(temp);
 		pHG->setTemp(temp);
 		pHG->switchPower(true);
 		pD->msgON();
+		enc_mode = READY;
+	Serial.print("ON ");
+		break;
+	case READY:	// Calibration point selected
+		tune = true;
+		pEnc->reset(temp, 40, 600, 1, 5);
+		temp = pCfg->tempInternal(temp);
+		enc_mode = OFF;
+	Serial.print("READY ");
+		break;
+	default:
+		Serial.print("XXXXX ");
 	}
+	Serial.print(enc_mode);
 	ready = false;
 	forceRedraw();
 	return this;
