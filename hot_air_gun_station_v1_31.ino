@@ -12,10 +12,11 @@
 #include <SPI.h>
 
 const uint16_t min_working_fan = 100;
-const uint16_t temp_minC   = 100;
+const uint16_t temp_minC   = 50; //100;
 const uint16_t temp_maxC   = 500;
 const uint16_t temp_ambC   = 25;
-const uint16_t temp_tip[3] = {200, 300, 400};  // Temperature reference points for calibration
+// const uint16_t temp_tip[3] = {200, 300, 400};  // Temperature reference points for calibration
+const uint16_t temp_tip[3] = {69, 85, 126};
 
 const uint8_t AC_SYNC_PIN  = 2;                // Outlet 220 v synchronization pin. Do not change!
 const uint8_t HOT_GUN_PIN  = 7;                // Hot gun heater management pin
@@ -206,7 +207,8 @@ public:
 	void  setDefaults(bool Write);                  // Set default parameter values if failed to load data from EEPROM
 private:
 	uint16_t t_tip[3];
-	const  uint16_t def_tip[3] = {587, 751, 850};   // Default values of internal sensor readings at reference temperatures
+	// const  uint16_t def_tip[3] = {587, 751, 850};   // Default values of internal sensor readings at reference temperatures
+	const  uint16_t def_tip[3] = {115, 157, 173};
 	const  uint16_t min_temp  = 50;
 	const  uint16_t max_temp  = 900;
 	const  uint16_t def_temp  = 600;                // Default preset temperature
@@ -905,8 +907,8 @@ void HOTGUN::switchPower(bool On) {
 
 // This routine is used to keep the hot air gun temperature near required value
 void HOTGUN::keepTemp(void) {
-	// uint16_t temp = analogRead(sen_pin);         // Check the hot air gun temperature
-	uint16_t temp = emulateTemp();
+	uint16_t temp = analogRead(sen_pin);         // Check the hot air gun temperature
+	// uint16_t temp = emulateTemp();
 	h_temp.put(temp);
 	
 	if ((temp >= int_temp_max + 30) || (temp > (temp_set + 100))) {   // Prevent global over heating
@@ -995,7 +997,7 @@ uint16_t HOTGUN::emulateTemp(void) {
 	static int16_t t = 0;
 	uint8_t ap = actual_power;
 	if (mode == POWER_FIXED)
-	ap = fix_power;
+		ap = fix_power;
 	ap = constrain(ap, 0, 100);
 	t += map(ap, 0, 100, 0, 30);
 	uint8_t fn = hg_fan.fanSpeed();
@@ -1377,7 +1379,6 @@ void calibSCREEN::init(void) {
 	uint16_t temp_set = pCfg->tempInternal(temp);
 	pHG->setTemp(temp_set);
 	forceRedraw(); 
-
 }
 
 SCREEN* calibSCREEN::show(void) {
@@ -1393,8 +1394,8 @@ SCREEN* calibSCREEN::show(void) {
 	uint8_t p = pHG->appliedPower();
 	if (!pHG->isOn()) p = 0;
 	pD->appliedPower(p);
-	if (tune && (abs(temp_set - temp) < 5) && (pHG->tempDispersion() <= 20) && (p > 1))  {
-	// if(tune && pHG->getFanSpeed() == 100) {
+	// if (tune && (abs(temp_set - temp) < 5) && (pHG->tempDispersion() <= 20) && (p > 1))  {
+	if(tune && pHG->getFanSpeed() == 100) {
 		if (!ready) {
 			pBz->shortBeep();
 			pD->msgReady();
@@ -1463,7 +1464,7 @@ SCREEN* calibSCREEN::menu(void) {
 			
 			sprintf(buff, "%3d| %3d %3d", mode,calib_temp[0][mode], calib_temp[1][mode]);
 			Serial.println(buff);
-			// pHG->setFanSpeed(101);
+			pHG->setFanSpeed(101);
 		}
 		// (tune)&&(!ready)
 		tune = false;
