@@ -1331,7 +1331,6 @@ void configSCREEN::rotaryValue(int16_t value) {
 //---------------------------------------- class calibSCREEN [ tip calibration ] -------------------------------
 class calibSCREEN : public SCREEN {
 public:
-	typedef enum { OFF, ON, READY } EncMod;
 	calibSCREEN(HOTGUN* HG, DSPL* DSP, ENCODER* Enc, BUZZER* Buzz, HOTGUN_CFG* Cfg) {
 		pHG   = HG;
 		pD    = DSP;
@@ -1359,12 +1358,10 @@ private:
 	bool            tune;                              // Whether the parameter is modifiying
 	const uint32_t  period   = 1000;                   // Update screen period
 	const uint16_t  temp_max = 900;
-	EncMod 			 enc_mode = OFF;
-	// uint8_t 			 enc_mode;
 };
 
 void calibSCREEN::init(void) {
-	mode = 0; enc_mode = OFF;
+	mode = 0;
 	pEnc->reset(mode, 0, 2, 1, 0, true);         // Select the reference temperature: 0 - temp_tip[0], 1 - temp_tip[1], 2 - temp_tip[2]
 	pHG->switchPower(false);
 	tune  = false;
@@ -1403,7 +1400,6 @@ SCREEN* calibSCREEN::show(void) {
 			pD->msgReady();
 			ready = true;
 			pEnc->reset(temp_tip[mode], 40, 600, 1, 5);
-			enc_mode = READY; 
 		}
 	}
 	if (ready) {
@@ -1416,54 +1412,48 @@ SCREEN* calibSCREEN::show(void) {
 		pD->msgOFF();
 		tune  = false;
 		ready = false;
-		enc_mode = OFF;
 	}
 	return this;
 }
 
 void calibSCREEN::rotaryValue(int16_t value) {
 	char buff[20];
-	sprintf(buff, "%d:%d:%d %d:%3d", tune,ready,enc_mode, mode,value);
+	sprintf(buff, "%d:%d %d:%3d", tune,ready, mode,value);
 	Serial.println(buff);
-	switch (enc_mode) {
-		case OFF: { // (!tune) select the temperature to be calibrated, t_min, t_mid or t_max
-			mode = value;
-			if (mode > 2) mode = 2;
-			uint16_t temp = temp_tip[mode];
-			temp = pCfg->tempInternal(temp);
-			pHG->setTemp(temp);	
-			break;
-		}
-		case ON: { // (tune)&&(!ready) adjust FAN speed
+	if(!tune) { // (!tune) select the temperature to be calibrated, t_min, t_mid or t_max
+		mode = value;
+		if (mode > 2) mode = 2;
+		uint16_t temp = temp_tip[mode];
+		temp = pCfg->tempInternal(temp);
+		pHG->setTemp(temp);
+	}
+	else {
+		if(!ready) {  // (tune)&&(!ready) adjust FAN speed
 			pHG->setFanSpeed(value);
 			pD->fanSpeed(value);
-			break;
 		}
-		case READY:	{ // (tune)&&(ready) Calibration point selected
+		else { // (tune)&&(ready) Calibration point selected
 			pD->tReal(value);
-			break;
-		}	
+		}
 	}
 	forceRedraw();
 }
 
 SCREEN* calibSCREEN::menu(void) {
 	char buff[20];
-	sprintf(buff, "IN|%d:%d %d", tune,ready,enc_mode);
+	sprintf(buff, "IN|%d:%d", tune,ready);
 	Serial.println(buff);
-	switch (enc_mode) {
-		case OFF: { // (!tune)
-			enc_mode = ON;
-			tune = true;
-			uint16_t temp = temp_tip[mode];
-			temp = pCfg->tempInternal(temp);
-			pHG->setTemp(temp);
-			pHG->switchPower(true);
-			pD->msgON();
-			pEnc->reset(pHG->getFanSpeed(), min_working_fan, 255, 5, 20);
-			break;
-		}
-		case READY: {  // (tune)&&(ready)
+	if(!tune) { // (!tune)
+		tune = true;
+		uint16_t temp = temp_tip[mode];
+		temp = pCfg->tempInternal(temp);
+		pHG->setTemp(temp);
+		pHG->switchPower(true);
+		pD->msgON();
+		pEnc->reset(pHG->getFanSpeed(), min_working_fan, 255, 5, 20);
+	}
+	else {
+		if(ready) {  // (tune)&&(ready)
 			calib_temp[0][mode] = pEnc->read();
 			calib_temp[1][mode] = pHG->tempAverage();
 			uint16_t tip[3];
@@ -1475,16 +1465,13 @@ SCREEN* calibSCREEN::menu(void) {
 			Serial.println(buff);
 			// pHG->setFanSpeed(101);
 		}
-		case ON: {  // (tune)&&(!ready)
-			enc_mode = OFF;
-			tune = false;
-			pHG->switchPower(false);
-			pD->msgOFF();
-			pEnc->reset(mode, 0, 2, 1, 0, true);
-			break;
-		}	
+		// (tune)&&(!ready)
+		tune = false;
+		pHG->switchPower(false);
+		pD->msgOFF();
+		pEnc->reset(mode, 0, 2, 1, 0, true);
 	}
-	sprintf(buff, "OUT|%d:%d %d", tune,ready,enc_mode);
+	sprintf(buff, "OUT|%d:%d", tune,ready);
 	Serial.println(buff);
 	ready = false;
 	forceRedraw();
