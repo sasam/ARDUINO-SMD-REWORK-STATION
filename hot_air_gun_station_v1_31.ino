@@ -12,11 +12,11 @@
 #include <SPI.h>
 
 const uint16_t min_working_fan = 100;
-const uint16_t temp_minC   = 50; //100;
+const uint16_t temp_minC   = 100;
 const uint16_t temp_maxC   = 500;
 const uint16_t temp_ambC   = 25;
-// const uint16_t temp_tip[3] = {200, 300, 400};  // Temperature reference points for calibration
-const uint16_t temp_tip[3] = {69, 85, 126};
+const uint16_t temp_tip[3] = {200, 300, 400};  // Temperature reference points for calibration
+// const uint16_t temp_tip[3] = {69, 85, 126};
 
 const uint8_t AC_SYNC_PIN  = 2;                // Outlet 220 v synchronization pin. Do not change!
 const uint8_t HOT_GUN_PIN  = 7;                // Hot gun heater management pin
@@ -207,8 +207,8 @@ public:
 	void  setDefaults(bool Write);                  // Set default parameter values if failed to load data from EEPROM
 private:
 	uint16_t t_tip[3];
-	// const  uint16_t def_tip[3] = {587, 751, 850};   // Default values of internal sensor readings at reference temperatures
-	const  uint16_t def_tip[3] = {115, 157, 173};
+	const  uint16_t def_tip[3] = {587, 751, 850};   // Default values of internal sensor readings at reference temperatures
+	// const  uint16_t def_tip[3] = {115, 157, 173};
 	const  uint16_t min_temp  = 50;
 	const  uint16_t max_temp  = 900;
 	const  uint16_t def_temp  = 600;                // Default preset temperature
@@ -569,13 +569,13 @@ public:
 	void     init(void)        { len = 0; }
 	uint16_t last(void);
 	uint16_t top(void)         { return queue[0]; }
-	void     put(uint16_t item);                                // Put new entry to the history
-	uint16_t average(void);                                     // calculate the average value
-	float   dispersion(void);                                          // calculate the math dispersion
+	void     put(uint16_t item);                    // Put new entry to the history
+	uint16_t average(void);                         // calculate the average value
+	float   dispersion(void);                       // calculate the math dispersion
 private:
 	volatile uint16_t queue[H_LENGTH];
-	volatile byte len;                                          // The number of elements in the queue
-	volatile byte index;                                        // The current element position, use ring buffer
+	volatile byte len;                              // The number of elements in the queue
+	volatile byte index;                            // The current element position, use ring buffer
 };
 
 void HISTORY::put(uint16_t item) {
@@ -583,7 +583,7 @@ void HISTORY::put(uint16_t item) {
 		queue[len++] = item;
 	} else {
 		queue[index ] = item;
-		if (++index >= H_LENGTH) index = 0;                         // Use ring buffer
+		if (++index >= H_LENGTH) index = 0;          // Use ring buffer
 	}
 }
 
@@ -599,10 +599,13 @@ uint16_t HISTORY::average(void) {
 	uint32_t sum = 0;
 	if (len == 0) return 0;
 	if (len == 1) return queue[0];
-	for (uint8_t i = 0; i < len; ++i) sum += queue[i];
-	sum += len >> 1;                                                  // round the average
+	for (uint8_t i = 0; i < len; ++i) {
+		sum += queue[i];
+	}
+	sum += len >> 1;                               // round the average
 	sum /= len;
 	return uint16_t(sum);
+
 }
 
 float HISTORY::dispersion(void) {
@@ -736,6 +739,7 @@ void FastPWM_D9::init(void) {
 	interrupts();
 }
 
+
 //--------------------- Hot air gun manager using total sine shape to power on the hardware ---------------
 class HOTGUN : public PID {
 public:
@@ -778,7 +782,7 @@ private:
 	uint8_t     fix_power   = 0;          // Fixed power value of the Hot Air Gun (or zero if off)
 	PowerMode   mode        = POWER_OFF;   
 	bool        chill;                    // To chill the hot gun
-	uint16_t    cst;                      // temp when start cooling
+	// uint16_t    cst;                      // temp when start cooling
 	volatile    uint32_t    last_period;  // The time in ms when the counter reset
 	const       uint8_t     period          = 100;
 	const       uint16_t    int_temp_max    = 900;
@@ -814,7 +818,7 @@ void HOTGUN::init(void) {
 bool HOTGUN::syncCB(void) {
 	if (++cnt >= period) {
 		cnt = 0;
-		last_period = millis();                   // Save the current time to check the external interrupts
+		last_period = millis();        // Save the current time to check the external interrupts
 		if (!active && (actual_power > 0)) {
 			digitalWrite(gun_pin, HIGH);
 			active = true;
@@ -825,7 +829,8 @@ bool HOTGUN::syncCB(void) {
 			active = false;
 		}
 	}
-	return (cnt == 0);                           // End of the Power period (period AC voltage shapes)
+	ADCSRA |= bit(ADSC);    // ADC start
+	return (cnt == 0);      // End of the Power period (period AC voltage shapes)
 }
 
 void HOTGUN::switchPower(bool On) {
@@ -847,7 +852,7 @@ void HOTGUN::switchPower(bool On) {
 						shutdown();
 					} else {                         // FAN && !On && connected && !cold
 						mode = POWER_COOLING;
-						cst=temp_set;
+						// cst=temp_set;
 					}
 				}
 			}
@@ -856,7 +861,7 @@ void HOTGUN::switchPower(bool On) {
 	case POWER_ON:
 		if (!On) {
 			mode = POWER_COOLING;
-			cst=temp_set;
+			// cst=temp_set;
 		}
 		break;
 	case POWER_FIXED:
@@ -869,7 +874,7 @@ void HOTGUN::switchPower(bool On) {
 						shutdown();
 					} else {                         // FAN && !On && connected && !cold
 						mode = POWER_COOLING;
-						cst=temp_set;
+						// cst=temp_set;
 					}
 				}
 			}
@@ -905,10 +910,16 @@ void HOTGUN::switchPower(bool On) {
 	h_power.init();
 }
 
+HISTORY n_temp;
+// static uint16_t Q_temp[H_LENGTH], Q_temp_average;
+
+
 // This routine is used to keep the hot air gun temperature near required value
 void HOTGUN::keepTemp(void) {
-	uint16_t temp = analogRead(sen_pin);         // Check the hot air gun temperature
+//	 uint16_t temp = analogRead(sen_pin);         // Check the hot air gun temperature
 	// uint16_t temp = emulateTemp();
+	uint16_t temp = n_temp.average();
+	// uint16_t temp = Q_temp_average;
 	h_temp.put(temp);
 	
 	if ((temp >= int_temp_max + 30) || (temp > (temp_set + 100))) {   // Prevent global over heating
@@ -944,7 +955,7 @@ void HOTGUN::keepTemp(void) {
 				if (isCold()) {                                       // FAN && connected && cold
 					shutdown();
 				} else {                                              // FAN && connected && !cold
-					uint16_t fan = map(temp, temp_gun_cold, cst, max_cool_fan, min_fan_speed);
+					uint16_t fan = map(temp, temp_gun_cold, int_temp_max, max_cool_fan, min_fan_speed);
 					fan = constrain(fan, min_fan_speed, max_fan_speed);
 					hg_fan.duty(fan);
 				}
@@ -968,7 +979,6 @@ void HOTGUN::fixPower(uint8_t Power) {
 		switchPower(false);
 		return;
 	}
-
 	if (Power > max_power) Power = max_power;
 	mode = POWER_FIXED;
 	fix_power = Power;
@@ -1394,8 +1404,8 @@ SCREEN* calibSCREEN::show(void) {
 	uint8_t p = pHG->appliedPower();
 	if (!pHG->isOn()) p = 0;
 	pD->appliedPower(p);
-	// if (tune && (abs(temp_set - temp) < 5) && (pHG->tempDispersion() <= 20) && (p > 1))  {
-	if(tune && pHG->getFanSpeed() == 100) {
+	if (tune && (abs(temp_set - temp) < 5) && (pHG->tempDispersion() <= 20) && (p > 1))  {
+	// if(tune && pHG->getFanSpeed() == 100) {
 		if (!ready) {
 			pBz->shortBeep();
 			pD->msgReady();
@@ -1464,7 +1474,7 @@ SCREEN* calibSCREEN::menu(void) {
 			
 			sprintf(buff, "%3d| %3d %3d", mode,calib_temp[0][mode], calib_temp[1][mode]);
 			Serial.println(buff);
-			pHG->setFanSpeed(101);
+			pHG->setFanSpeed(pHG->getFanSpeed()+1); // za test min fan => ready
 		}
 		// (tune)&&(!ready)
 		tune = false;
@@ -1572,17 +1582,15 @@ void tuneSCREEN::rotaryValue(int16_t value) {
 	forceRedraw();
 }
 
+
 SCREEN* tuneSCREEN::show(void) {
 	if (millis() < update_screen) return this;
 	update_screen = millis() + period;
 	uint16_t temp   = pHG->getCurrTemp();
-	uint8_t  power  = pHG->appliedPower();
-	if (!on) {
-		power = pEnc->read();
-	}
+	uint8_t  power  = pEnc->read();
 	pD->tInternal(temp);
 	pD->appliedPower(power);
-	if (heat_ms && ((millis() - heat_ms) > 3000) && (pHG->tempDispersion() < 10) && (power > 1)) {
+	if (heat_ms && ((millis() - heat_ms) > 3000) && (pHG->tempDispersion() < 10) && (pHG->appliedPower() > 1)) {
 		pBz->shortBeep();
 		heat_ms = 0;
 	}
@@ -1769,12 +1777,22 @@ SCREEN   *pCurrentScreen = &offScr;
 
 volatile bool  end_of_power_period = false;
 
+volatile uint16_t readFlag;
+volatile uint16_t analogVal;
+//HISTORY n_temp;
+
 void syncAC(void) {
 	end_of_power_period = hg.syncCB();
 }
 
+
 void rotEncChange(void) {
 	rotEncoder.changeINTR();
+}
+
+ISR(ADC_vect) {
+	readFlag = 1;
+	analogVal = ADCL | (ADCH << 8);
 }
 
 void setup() {
@@ -1782,8 +1800,18 @@ void setup() {
 	disp.init();
 
 	// Activate internal 1.1V voltage reference for ADC
-	analogReference(INTERNAL);
-	analogRead(TEMP_GUN_PIN);  // force voltage reference to be turned on
+//	 analogReference(INTERNAL);
+//	 analogRead(TEMP_GUN_PIN);  // force voltage reference to be turned on
+
+	// initialise ADC & start conversion
+	ADMUX  = 0;
+	ADCSRA = 0;
+	ADCSRB = 0;
+	ADMUX = bit(REFS1)|bit(REFS0); // 1.1V, ADLAR=0, A0
+//	ADCSRA = bit(ADEN)|bit(ADIE)|bit(ADPS2)|bit(ADPS1)|bit(ADPS0); // en,intr,prescal=128
+	ADCSRA = bit(ADEN)|bit(ADIE)|bit(ADPS2)|bit(ADPS1);            // en,intr,prescal= 64
+// ADCSRA = bit(ADEN)|bit(ADIE)|bit(ADPS2)|bit(ADPS0);            // en,intr,prescal= 32
+	ADCSRA |= bit(ADSC); // ADC start
 
 	// Load configuration parameters
 	hgCfg.init();
@@ -1816,10 +1844,14 @@ void setup() {
 	pCurrentScreen->init();
 }
 
+
 void loop() {
 	static bool     reset_encoder = true;
 	static int16_t  old_pos       = 0;
 	static uint32_t ac_check      = 5000;
+ static uint32_t br0,br1 =0;
+	static byte index=0;
+	static uint16_t  sum;
 
 	int16_t pos = rotEncoder.read();
 	if (reset_encoder) {
@@ -1831,6 +1863,21 @@ void loop() {
 			old_pos = pos;
 		}
 	}
+
+	if(readFlag) {
+		readFlag = 0;
+		n_temp.put(analogVal);
+		// sum = sum - Q_temp[index];
+		// Q_temp[index] = analogVal;
+		// sum = sum + analogVal;
+		// index++;
+		// if (index >= H_LENGTH) {
+			// index = 0;
+		// }
+		// Q_temp_average = sum / H_LENGTH;
+br1++;		
+	}
+br0++;
 
 	SCREEN* nxt = pCurrentScreen->reedSwitch(reedSwitch.status());
 	if (nxt != pCurrentScreen) {
@@ -1873,6 +1920,8 @@ void loop() {
 	if (end_of_power_period) {                   // Calculate the required power
 		hg.keepTemp();
 		end_of_power_period = false;
+   Serial.print(br0);Serial.print(" ");Serial.println(br1);
+   br0=br1=0;
 	}
 
 	if (millis() > ac_check) {
