@@ -346,25 +346,81 @@ void HOTGUN_CFG::setDefaults(bool Write) {
 }
 
 //------------------------------------------ class BUZZER ------------------------------------------------------
+
+/* void TFTone(uint8_t pin, unsigned long frequency, unsigned int duration) {
+	if (frequency == 0) { // If frequency or volume are zero, just wait duration and exit.
+		delay(duration);
+		return;
+	} 
+	frequency = 1000000 / frequency; 	// Calculate the square wave length (in microseconds).
+	uint32_t duty = frequency / 2; 		// Calculate the duty cycle (volume).
+	pinMode(pin, OUTPUT);               // Set pin to output mode.
+
+	uint32_t startTime = millis();           // Starting time of note.
+	while(millis() - startTime < duration) { // Loop for the duration.
+		digitalWrite(pin,HIGH);  // Set pin high.
+		delayMicroseconds(duty); // Square wave duration (how long to leave pin high).
+		digitalWrite(pin,LOW);   // Set pin low.
+		delayMicroseconds(frequency - duty); // Square wave duration (how long to leave pin low).
+	}
+} */
+/* void swTone(uint8_t pin, uint32_t frequency, uint16_t duration) {
+	if (!frequency) { delay(duration); return; } // Frequency is false (zero), nothing to play, just delay for duration and return.
+	frequency = 500000 / frequency;         	// Calculate how long to leave the pin high and low.
+	uint32_t noteEnd = millis() + duration;   // Calculate when the note will end.
+	pinMode(pin, OUTPUT);
+	while(millis() <= noteEnd) {  // Loop for the duration.
+		// PORTD |= (1<<6);
+		// PORTD |= bit(PIND6);
+		PORTD |= (1<<PIND6);
+		delayMicroseconds(frequency); // Square wave duration (how long to leave pin high).
+		// PORTD &= (~(1<<6));
+		// PORTD &= (~(bit(PIND6));
+		PORTD &= (~(1<<PIND6));
+		delayMicroseconds(frequency); // Square wave duration (how long to leave pin low).
+	}
+} */
+
+// #define swTone tone
+
 class BUZZER {
 public:
 	BUZZER(byte buzzerP)    { buzzer_pin = buzzerP; }
 	void init(void);
-	void shortBeep(void)    { tone(buzzer_pin, 3520, 160); }
-	void lowBeep(void)      { tone(buzzer_pin,  880, 160); }
-	void doubleBeep(void)   { tone(buzzer_pin, 3520, 160); delay(300); tone(buzzer_pin, 3520, 160); }
-	void failedBeep(void)   { tone(buzzer_pin, 3520, 160); delay(170);
-		tone(buzzer_pin, 880, 250); delay(260);
-		tone(buzzer_pin, 3520, 160);
+	void shortBeep(void)    { swTone(buzzer_pin, 3520, 160); }
+	void lowBeep(void)      { swTone(buzzer_pin,  880, 160); }
+	void doubleBeep(void)   { swTone(buzzer_pin, 3520, 160); delay(300); swTone(buzzer_pin, 3520, 160); }
+	void failedBeep(void)   { swTone(buzzer_pin, 3520, 160); delay(170);
+		swTone(buzzer_pin, 880, 250); delay(260);
+		swTone(buzzer_pin, 3520, 160);
 	}
 private:
+	void swTone(uint8_t pin, uint32_t frequency, uint16_t duration);
 	byte buzzer_pin;
 };
 
 void BUZZER::init(void) {
 	pinMode(buzzer_pin, OUTPUT);
-	noTone(buzzer_pin);
+	swTone(buzzer_pin, 0, 0);
 }
+
+void BUZZER::swTone(uint8_t pin, uint32_t frequency, uint16_t duration) {
+	if (!frequency) { delay(duration); return; } // Frequency is false (zero), nothing to play, just delay for duration and return.
+	frequency = 500000 / frequency;         	// Calculate how long to leave the pin high and low.
+	uint32_t noteEnd = millis() + duration;   // Calculate when the note will end.
+	pinMode(pin, OUTPUT);
+	while(millis() <= noteEnd) {  // Loop for the duration.
+		// PORTD |= (1<<6);
+		// PORTD |= bit(PIND6);
+		PORTD |= (1<<PIND6);
+		delayMicroseconds(frequency); // Square wave duration (how long to leave pin high).
+		// PORTD &= (~(1<<6));
+		// PORTD &= (~(bit(PIND6));
+		PORTD &= (~(1<<PIND6));
+		delayMicroseconds(frequency); // Square wave duration (how long to leave pin low).	
+	}
+}
+
 
 //------------------------------------------ class lcd DSPLay for soldering IRON -----------------------------
 class DSPL : protected LiquidCrystal_I2C {
