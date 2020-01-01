@@ -775,10 +775,11 @@ public:
 	bool        areExternalInterrupts(void)   { return millis() - last_period < period * 15;              }
 	uint8_t     avgPowerPcnt(void);
 	void        switchPower(bool On);
-	void        fixPower(uint8_t Power);      // Set the specified power to the the hot gun
+	void        fixPower(uint8_t Power);    // Set the specified power to the the hot gun
 	void        keepTemp(void);
 	uint8_t     getMaxFixedPower(void)        { return max_fix_power; }
-	bool        syncCB(void);                 // Return true at the end of the power period
+	bool        syncCB(void);               // Return true at the end of the power period
+	HISTORY     h_temp;                     // The history queue of the temperature	
 private: 
 	bool        isGunConnected(void)          { return true; }
 	void        shutdown(void);
@@ -789,7 +790,6 @@ private:
 	uint8_t     sen_pin;
 	uint8_t     gun_pin;
 	HISTORY     h_power;                  // The history queue of power applied values
-	HISTORY     h_temp;                   // The history queue of the temperature
 	volatile    uint8_t     cnt;
 	volatile    uint8_t     actual_power;
 	volatile    bool        active;
@@ -925,17 +925,18 @@ void HOTGUN::switchPower(bool On) {
 	h_power.init();
 }
 
-HISTORY n_temp;
-// static uint16_t Q_temp[H_LENGTH], Q_temp_average;
+// HISTORY n_temp;
+static uint16_t Qtemp[H_LENGTH], Qtemp_average;
 
 
 // This routine is used to keep the hot air gun temperature near required value
 void HOTGUN::keepTemp(void) {
 //	 uint16_t temp = analogRead(sen_pin);         // Check the hot air gun temperature
-	// uint16_t temp = emulateTemp();
-	uint16_t temp = n_temp.average();
-	// uint16_t temp = Q_temp_average;
-	h_temp.put(temp);
+//  uint16_t temp = emulateTemp();
+//	 uint16_t temp = n_temp.average();
+//  uint16_t temp = Qtemp_average;
+//  h_temp.put(temp);
+    int16_t temp = h_temp.average();
 	
 	if ((temp >= int_temp_max + 30) || (temp > (temp_set + 100))) {   // Prevent global over heating
 		if (mode == POWER_ON) chill = true;                            // Turn off the power in main working mode only; 
@@ -1796,10 +1797,15 @@ volatile uint16_t readFlag;
 volatile uint16_t analogVal;
 //HISTORY n_temp;
 
-void syncAC(void) {
+ ISR(TIMER2_COMPA_vect) {
+	TCCR2B=0;         // Timer2 stop
 	end_of_power_period = hg.syncCB();
 }
 
+void syncAC(void) {
+	TCNT2=0;             // reset timer to 0
+	TCCR2B=bit(CS21);    // Timer2 start with prescal 8
+}
 
 void rotEncChange(void) {
 	rotEncoder.changeINTR();
@@ -1827,6 +1833,13 @@ void setup() {
 	ADCSRA = bit(ADEN)|bit(ADIE)|bit(ADPS2)|bit(ADPS1);            // en,intr,prescal= 64
 // ADCSRA = bit(ADEN)|bit(ADIE)|bit(ADPS2)|bit(ADPS0);            // en,intr,prescal= 32
 	ADCSRA |= bit(ADSC); // ADC start
+
+//setup Timer2 for delay
+	TCCR2A=bit(WGM21);  	// CTC
+	TCCR2B=0;   			// Timer2 stop
+	TCNT2=0;             // conter = 0
+	OCR2A=2*20;          // delay 10us + kašnjenje od koda
+	TIMSK2=bit(OCIE2A);	// interrupt on Compare A Match
 
 	// Load configuration parameters
 	hgCfg.init();
@@ -1881,16 +1894,17 @@ void loop() {
 
 	if(readFlag) {
 		readFlag = 0;
-		n_temp.put(analogVal);
-		// sum = sum - Q_temp[index];
-		// Q_temp[index] = analogVal;
-		// sum = sum + analogVal;
-		// index++;
-		// if (index >= H_LENGTH) {
-			// index = 0;
-		// }
-		// Q_temp_average = sum / H_LENGTH;
-br1++;		
+		// n_temp.put(analogVal);
+		sum = sum - Qtemp[index];
+		Qtemp[index] = analogVal;
+		sum = sum + analogVal;
+		index++;
+		if (index >= H_LENGTH) {
+			index = 0;
+			Qtemp_average = (sum+8)/H_LENGTH;
+			hg.h_temp.put(Qtemp_average);
+		}
+	br1++;
 	}
 br0++;
 
