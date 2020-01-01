@@ -348,6 +348,7 @@ void HOTGUN_CFG::setDefaults(bool Write) {
 
 //------------------------------------------ class BUZZER ------------------------------------------------------
 // BUZZER_PIN on D6 (PORTD PIND6)
+// #define BUZZ_PIN   PIND6
 
 class BUZZER {
 public:
@@ -369,14 +370,14 @@ void BUZZER::init(void) {
 
 void BUZZER::swTone(uint32_t freq_duty, uint16_t duration) {
 	if (!freq_duty) { delay(duration); return; } // nothing to play, just delay for duration and return.
-	freq_duty = 500000 / freq_duty;         	// Calculate how long to leave the pin high and low.
-	uint32_t noteEnd = millis() + duration;   // Calculate when the note will end.
-	DDRD |= (1<<PIND6);			// sets Arduino pins 6 as output
-	while(millis() <= noteEnd) {  // Loop for the duration.
-		PORTD |= (1<<PIND6);
-		delayMicroseconds(freq_duty); // Square wave duration (how long to leave pin high).
-		PORTD &= (~(1<<PIND6));
-		delayMicroseconds(freq_duty); // Square wave duration (how long to leave pin low).	
+	freq_duty = 500000 / freq_duty;          // Calculate how long to leave the pin high and low.
+	uint32_t noteEnd = millis() + duration;  // Calculate when the note will end.
+	DDRD |= (1<<PIND6);                      // sets Arduino pins D6 as output
+	while(millis() <= noteEnd) {             // Loop for the duration.
+		PORTD |= (1<<PIND6);                  // sets Arduino pins D6 HIGH
+		delayMicroseconds(freq_duty);         // Square wave duration (how long to leave pin high).
+		PORTD &= (~(1<<PIND6));               // sets Arduino pins D6 LOW
+		delayMicroseconds(freq_duty);         // Square wave duration (how long to leave pin low).
 	}
 }
 
