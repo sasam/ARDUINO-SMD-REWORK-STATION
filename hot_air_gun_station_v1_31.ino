@@ -832,12 +832,14 @@ void HOTGUN::init(void) {
 
 bool HOTGUN::syncCB(void) {
 	if (++cnt >= period) {
-		cnt = 0;
-		last_period = millis();        // Save the current time to check the external interrupts
-		if (!active && (actual_power > 0)) {
-			digitalWrite(gun_pin, HIGH);
-			active = true;
+		if (actual_power > 0) {
+			if (!active) {
+				digitalWrite(gun_pin, HIGH);
+				active = true;
+			}
 		}
+		last_period = millis();        // Save the current time to check the external interrupts
+		cnt = 0;
 	} else if (cnt >= actual_power) {
 		if (active) {
 			digitalWrite(gun_pin, LOW);
@@ -1838,7 +1840,7 @@ void setup() {
 	TCCR2A=bit(WGM21);  	// CTC
 	TCCR2B=0;   			// Timer2 stop
 	TCNT2=0;             // conter = 0
-	OCR2A=2*20;          // delay 10us + kašnjenje od koda
+	OCR2A=2*74;          // delay 74us + kašnjenje od koda (cca 11us)
 	TIMSK2=bit(OCIE2A);	// interrupt on Compare A Match
 
 	// Load configuration parameters
