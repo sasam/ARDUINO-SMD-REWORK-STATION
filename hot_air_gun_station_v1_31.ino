@@ -927,7 +927,7 @@ void HOTGUN::switchPower(bool On) {
 	h_power.init();
 }
 
-// HISTORY n_temp;
+// global variable for temp mesurement every cycle and averaging every H_LENGTH cicles
 static uint16_t Qtemp[H_LENGTH], Qtemp_average;
 
 
@@ -1446,9 +1446,6 @@ SCREEN* calibSCREEN::show(void) {
 }
 
 void calibSCREEN::rotaryValue(int16_t value) {
-	char buff[20];
-	sprintf(buff, "%d:%d %d:%3d", tune,ready, mode,value);
-	Serial.println(buff);
 	if(!tune) { // (!tune) select the temperature to be calibrated, t_min, t_mid or t_max
 		mode = value;
 		if (mode > 2) mode = 2;
@@ -1469,9 +1466,6 @@ void calibSCREEN::rotaryValue(int16_t value) {
 }
 
 SCREEN* calibSCREEN::menu(void) {
-	char buff[20];
-	sprintf(buff, "IN|%d:%d", tune,ready);
-	Serial.println(buff);
 	if(!tune) { // (!tune)
 		tune = true;
 		uint16_t temp = temp_tip[mode];
@@ -1489,10 +1483,6 @@ SCREEN* calibSCREEN::menu(void) {
 			buildCalibration(tip);
 			pCfg->applyCalibrationData(tip);
 			pD->fanSpeed(pHG->getFanSpeed());
-			
-			sprintf(buff, "%3d| %3d %3d", mode,calib_temp[0][mode], calib_temp[1][mode]);
-			Serial.println(buff);
-			pHG->setFanSpeed(pHG->getFanSpeed()+1); // za test min fan => ready
 		}
 		// (tune)&&(!ready)
 		tune = false;
@@ -1500,8 +1490,6 @@ SCREEN* calibSCREEN::menu(void) {
 		pD->msgOFF();
 		pEnc->reset(mode, 0, 2, 1, 0, true);
 	}
-	sprintf(buff, "OUT|%d:%d", tune,ready);
-	Serial.println(buff);
 	ready = false;
 	forceRedraw();
 	return this;
@@ -1822,25 +1810,21 @@ void setup() {
    Serial.begin(57600);
 	disp.init();
 
-	// Activate internal 1.1V voltage reference for ADC
-//	 analogReference(INTERNAL);
-//	 analogRead(TEMP_GUN_PIN);  // force voltage reference to be turned on
-
 	// initialise ADC & start conversion
 	ADMUX  = 0;
 	ADCSRA = 0;
 	ADCSRB = 0;
-	ADMUX = bit(REFS1)|bit(REFS0); // 1.1V, ADLAR=0, A0
+	ADMUX = bit(REFS1)|bit(REFS0); // internal 1.1V voltage reference, ADLAR=0, A0
 //	ADCSRA = bit(ADEN)|bit(ADIE)|bit(ADPS2)|bit(ADPS1)|bit(ADPS0); // en,intr,prescal=128
 	ADCSRA = bit(ADEN)|bit(ADIE)|bit(ADPS2)|bit(ADPS1);            // en,intr,prescal= 64
 // ADCSRA = bit(ADEN)|bit(ADIE)|bit(ADPS2)|bit(ADPS0);            // en,intr,prescal= 32
 	ADCSRA |= bit(ADSC); // ADC start
 
-//setup Timer2 for delay
+	//setup Timer2 for delay triac firing
 	TCCR2A=bit(WGM21);  	// CTC
 	TCCR2B=0;   			// Timer2 stop
 	TCNT2=0;             // conter = 0
-	OCR2A=2*74;          // delay 74us + kašnjenje od koda (cca 11us)
+	OCR2A=2*74;          // delay 74us + code dely (cca 11us) = 85us
 	TIMSK2=bit(OCIE2A);	// interrupt on Compare A Match
 
 	// Load configuration parameters
@@ -1879,7 +1863,6 @@ void loop() {
 	static bool     reset_encoder = true;
 	static int16_t  old_pos       = 0;
 	static uint32_t ac_check      = 5000;
- static uint32_t br0,br1 =0;
 	static byte index=0;
 	static uint16_t  sum;
 
@@ -1896,7 +1879,6 @@ void loop() {
 
 	if(readFlag) {
 		readFlag = 0;
-		// n_temp.put(analogVal);
 		sum = sum - Qtemp[index];
 		Qtemp[index] = analogVal;
 		sum = sum + analogVal;
@@ -1906,9 +1888,7 @@ void loop() {
 			Qtemp_average = (sum+8)/H_LENGTH;
 			hg.h_temp.put(Qtemp_average);
 		}
-	br1++;
 	}
-br0++;
 
 	SCREEN* nxt = pCurrentScreen->reedSwitch(reedSwitch.status());
 	if (nxt != pCurrentScreen) {
@@ -1951,8 +1931,6 @@ br0++;
 	if (end_of_power_period) {                   // Calculate the required power
 		hg.keepTemp();
 		end_of_power_period = false;
-   Serial.print(br0);Serial.print(" ");Serial.println(br1);
-   br0=br1=0;
 	}
 
 	if (millis() > ac_check) {
