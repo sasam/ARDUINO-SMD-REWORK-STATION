@@ -10,13 +10,13 @@
 #include <CommonControls.h>
 #include <EEPROM.h>
 #include <SPI.h>
+#include "FastPID.h"
 
 const uint16_t min_working_fan = 100;
 const uint16_t temp_minC   = 100;
 const uint16_t temp_maxC   = 500;
 const uint16_t temp_ambC   = 25;
 const uint16_t temp_tip[3] = {200, 300, 400};  // Temperature reference points for calibration
-// const uint16_t temp_tip[3] = {69, 85, 126};
 
 const uint8_t AC_SYNC_PIN  = 2;                // Outlet 220 v synchronization pin. Do not change!
 const uint8_t HOT_GUN_PIN  = 7;                // Hot gun heater management pin
@@ -30,6 +30,8 @@ const uint8_t R_BUTN_PIN   = 4;                // Rotary encoder button pin
 const uint8_t REED_SW_PIN  = 8;                // Reed switch pin
 
 #define BUZZER_PIN   = PIND6;                // Buzzer pin
+
+volatile uint16_t analogVal;
 
 //------------------------------------------ Configuration data ------------------------------------------------
 /* Config record in the EEPROM has the following format:
@@ -209,7 +211,6 @@ public:
 private:
 	uint16_t t_tip[3];
 	const  uint16_t def_tip[3] = {587, 751, 850};   // Default values of internal sensor readings at reference temperatures
-	// const  uint16_t def_tip[3] = {115, 157, 173};
 	const  uint16_t min_temp  = 50;
 	const  uint16_t max_temp  = 900;
 	const  uint16_t def_temp  = 600;                // Default preset temperature
@@ -652,15 +653,20 @@ float HISTORY::dispersion(void) {
 *   V1.0        [ 638,  196,   1]
 *   11/27/2019  [2009, 1600,  20]
 */
-class PID {
+/* class PID {
 public:
 	PID(void) {
-		// Kp = 638;
-		// Ki = 196;
-		// Kd =   1;
-		Kp = 2009;
-		Ki = 1600;
-		Kd =   20;
+		Kp =  768; // 0.375         96
+		Ki =   32; // 0.015625‬       4
+		Kd =  328; // 0.16015625‬    41
+
+	// Kp =  638; // 0.3115234375  79
+	// Ki =  196; // 0.095703125   24
+	// Kd =    1; // 0.00048828125  0
+
+	// Kp = 2009; // 0.98095703125
+	// Ki = 1600; // 0.78125‬
+	// Kd =   20; // 0.00048828125
 	}
 	void resetPID(int temp = -1);                // reset PID algorithm history parameters      
 	// Calculate the power to be applied
@@ -670,7 +676,7 @@ private:
 	void  debugPID(int t_set, int t_curr, long kp, long ki, long kd, long delta_p);
 	int   temp_h0, temp_h1;                      // previously measured temperature
 	bool  pid_iterate;                           // Whether the iterative process is used
-	long  i_summ;                                // Ki summary multiplied by denominator
+	int64_t  i_summ;                             // Ki summary multiplied by denominator
 	long  power;                                 // The power iterative multiplied by denominator
 	long  Kp, Ki, Kd;                            // The PID algorithm coefficients multiplied by denominator
 	const byte denominator_p = 11;               // The common coefficient denominator power of 2 (11 means divide by 2048)
@@ -682,9 +688,9 @@ void PID::resetPID(int temp) {
 	i_summ = 0;
 	pid_iterate = false;
 	if ((temp > 0) && (temp < 1000))
-	temp_h1 = temp;
+		temp_h1 = temp;
 	else
-	temp_h1 = 0;
+		temp_h1 = 0;
 }
 
 int PID::changePID(uint8_t p, int k) {
@@ -706,7 +712,7 @@ int PID::changePID(uint8_t p, int k) {
 
 long PID::reqPower(int temp_set, int temp_curr) {
 	if (temp_h0 == 0) {
-		// When the temperature is near the preset one, reset the PID and prepare iterative formula                        
+		// When the temperature is near the preset one, reset the PID and prepare iterative formula
 		if ((temp_set - temp_curr) < 30) {
 			if (!pid_iterate) {
 				pid_iterate = true;
@@ -714,22 +720,63 @@ long PID::reqPower(int temp_set, int temp_curr) {
 				i_summ = 0;
 			}
 		}
-		i_summ += temp_set - temp_curr;                                     // first, use the direct formula, not the iterate process
+		i_summ += temp_set - temp_curr;      // first, use the direct formula, not the iterate process
 		power = Kp*(temp_set - temp_curr) + Ki*i_summ;
 		// If the temperature is near, prepare the PID iteration process
 	} else {
-		long kp = Kp * (temp_h1 - temp_curr);
-		long ki = Ki * (temp_set - temp_curr);
-		long kd = Kd * (temp_h0 + temp_curr - 2*temp_h1);
-		long delta_p = kp + ki + kd;
-		power += delta_p;                                                   // power kept multiplied by denominator!
+        long kp = Kp * (temp_h1 - temp_curr);
+        long ki = Ki * (temp_set - temp_curr);
+        long kd = Kd * (temp_h0 + temp_curr - 2*temp_h1);
+        long delta_p = kp + ki + kd;
+        power += delta_p;		// power kept multiplied by denominator!
 	}
 	if (pid_iterate) temp_h0 = temp_h1;
 	temp_h1 = temp_curr;
-	long pwr = power + (1 << (denominator_p-1));                           // prepare the power to delete by denominator, round the result
-	pwr >>= denominator_p;                                                 // delete by the denominator
+	long pwr = power + (1 << (denominator_p-1));    // prepare the power to delete by denominator, round the result
+	pwr >>= denominator_p;                          // delete by the denominator
 	return pwr;
+} */
+
+class PID : public FastPID {
+public:
+
+#define  Kp 0.296875
+#define  Ki 0.0546875
+#define  Kd 0.0
+
+	PID (void) : FastPID(Kp, Ki, Kd, 1, 8, false)  { }
+
+	void resetPID(void) {
+		clear();
+		// setOutputRange(0,255);
+	}                // reset PID algorithm history parameters
+	uint8_t reqPower(int temp_set, int temp_curr) {
+		return step(temp_set, temp_curr);
+	}
+	int  changePID(uint8_t p, int k);
+};
+
+// void PID::resetPID(int temp) {
+	// clear();
+// }
+
+int PID::changePID(uint8_t p, int k) {
+	switch (p) {
+	case 1:
+		if (k >= 0) _p = k;
+		return _p;
+	case 2:
+		if (k >= 0) _i = k;
+		return _i;
+	case 3:
+		if (k >= 0) _d = k;
+		return _d;
+	default:
+		break;
+	}
+	return 0;
 }
+
 
 //--------------------- High frequency PWM signal calss on D9 pin ------------------------- ---------------
 class FastPWM_D9 {
@@ -779,7 +826,8 @@ public:
 	void        keepTemp(void);
 	uint8_t     getMaxFixedPower(void)        { return max_fix_power; }
 	bool        syncCB(void);               // Return true at the end of the power period
-	HISTORY     h_temp;                     // The history queue of the temperature	
+	HISTORY     h_temp;                     // The history queue of the temperature
+	volatile    uint8_t     cnt;
 private: 
 	bool        isGunConnected(void)          { return true; }
 	void        shutdown(void);
@@ -790,7 +838,7 @@ private:
 	uint8_t     sen_pin;
 	uint8_t     gun_pin;
 	HISTORY     h_power;                  // The history queue of power applied values
-	volatile    uint8_t     cnt;
+	// volatile    uint8_t     cnt;
 	volatile    uint8_t     actual_power;
 	volatile    bool        active;
 	uint8_t     actual_fan  = 0;          // Power applied to the fan (can be turned off)
@@ -928,7 +976,7 @@ void HOTGUN::switchPower(bool On) {
 }
 
 // global variable for temp mesurement every cycle and averaging every H_LENGTH cicles
-static uint16_t Qtemp[H_LENGTH], Qtemp_average;
+// static uint16_t Qtemp[H_LENGTH], Qtemp_average;
 
 
 // This routine is used to keep the hot air gun temperature near required value
@@ -938,13 +986,15 @@ void HOTGUN::keepTemp(void) {
 //	 uint16_t temp = n_temp.average();
 //  uint16_t temp = Qtemp_average;
 //  h_temp.put(temp);
-    int16_t temp = h_temp.average();
+     int16_t temp = h_temp.average();
+//	 int16_t temp = analogVal;
 	
 	if ((temp >= int_temp_max + 30) || (temp > (temp_set + 100))) {   // Prevent global over heating
 		if (mode == POWER_ON) chill = true;                            // Turn off the power in main working mode only; 
 	}
 
-	long p = 0;
+	// long p = 0;
+	uint8_t p = 0;
 	switch (mode) {
 	case POWER_OFF:
 		break;
@@ -973,7 +1023,8 @@ void HOTGUN::keepTemp(void) {
 				if (isCold()) {                                       // FAN && connected && cold
 					shutdown();
 				} else {                                              // FAN && connected && !cold
-					uint16_t fan = map(temp, temp_gun_cold, int_temp_max, max_cool_fan, min_fan_speed);
+					// uint16_t fan = map(temp, temp_gun_cold, int_temp_max, max_cool_fan, min_fan_speed);
+					uint16_t fan = map(temp, temp_gun_cold, int_temp_max, 255, 200	);
 					fan = constrain(fan, min_fan_speed, max_fan_speed);
 					hg_fan.duty(fan);
 				}
@@ -993,7 +1044,7 @@ void HOTGUN::keepTemp(void) {
 }
 
 void HOTGUN::fixPower(uint8_t Power) {
-	if (Power == 0) {                                        // To switch off the hot gun, set the Power to 0
+	if (Power == 0) {                   // To switch off the hot gun, set the Power to 0
 		switchPower(false);
 		return;
 	}
@@ -1638,25 +1689,25 @@ public:
 	virtual SCREEN* show(void);
 	virtual void    rotaryValue(int16_t value);
 private:
-	void        showCfgInfo(void);                  // show the main config information: Temp set, fan speed and PID coefficients
-	HOTGUN*     pHG;                                // Pointer to the IRON instance
-	ENCODER*    pEnc;                               // Pointer to the rotary encoder instance
-	uint8_t     mode;                               // Which parameter to tune [0-5]: select element, Kp, Ki, Kd, temp, speed
-	uint32_t    update_screen;                      // Time in ms when to print thee info
+	void        showCfgInfo(void);      // show the main config information: Temp set, fan speed and PID coefficients
+	HOTGUN*     pHG;                    // Pointer to the IRON instance
+	ENCODER*    pEnc;                   // Pointer to the rotary encoder instance
+	uint8_t     mode;                   // Which parameter to tune [0-5]: select element, Kp, Ki, Kd, temp, speed
+	uint32_t    update_screen;          // Time in ms when to print thee info
 	int         temp_set;
-	const uint16_t period = 1100;
+	const uint16_t period = 500; //1100;
 };
 
 void pidSCREEN::init(void) {
 	temp_set = pHG->getTemp();
-	mode = 0;                                       // select the element from the list
-	pEnc->reset(1, 1, 5, 1, 1, true);               // 1 - Kp, 2 - Ki, 3 - Kd, 4 - temp, 5 - fan
+	mode = 0;                           // select the element from the list
+	pEnc->reset(1, 1, 5, 1, 1, true);   // 1 - Kp, 2 - Ki, 3 - Kd, 4 - temp, 5 - fan
 	showCfgInfo();
 	Serial.println("");
 }
 
 void pidSCREEN::rotaryValue(int16_t value) {
-	if (mode == 0) {                                // select element from the menu
+	if (mode == 0) {                    // select element from the menu
 		showCfgInfo();
 		switch (value) {
 		case 1:
@@ -1708,17 +1759,20 @@ void pidSCREEN::rotaryValue(int16_t value) {
 SCREEN* pidSCREEN::show(void) {
 	if (millis() < update_screen) return this;
 	update_screen = millis() + period;
-	if (pHG->isOn()) {
-		char buff[80];
-		int       temp   = pHG->getCurrTemp();
-		uint8_t   pwr  = pHG->powerAverage();
-		uint8_t  fs    = pHG->getFanSpeed();
-		fs = map(fs, 0, 255, 0, 100);
-		sprintf(buff, "%3d: power = %3d%c, fan = %3d;", temp_set - temp, pwr, '%', fs);
+	 if (pHG->isOn()) {
+		char buff[40];
+		int      temp  = pHG->getCurrTemp();
+		uint8_t  Apwr   = pHG->powerAverage();
+		uint8_t  pwr   = pHG->appliedPower();
+		// uint8_t  fs    = pHG->getFanSpeed();
+		// fs = map(fs, 0, 255, 0, 100);
+		// sprintf(buff, "%3d,%3d,%3d,", temp_set, temp, pHG->cnt  );
+		sprintf(buff, "%3d,%3d,%3d,%3d,", temp_set, temp, pwr, Apwr );
 		Serial.println(buff);
-	}
+	 }
 	return this;
 }
+
 SCREEN* pidSCREEN::menu(void) {                 // The encoder button pressed
 	if (mode == 0) {                             // select upper or lower temperature limit
 		mode = pEnc->read();
@@ -1732,13 +1786,14 @@ SCREEN* pidSCREEN::menu(void) {                 // The encoder button pressed
 		}
 	} else {    
 		mode = 0;
-		pEnc->reset(1, 1, 5, 1, 1, true);         // 1 - Kp, 2 - Ki, 3 - Kd, 4 - temp, 5 - fan speed
+		pEnc->reset(1, 1, 5, 1, 1, true);      // 1 - Kp, 2 - Ki, 3 - Kd, 4 - temp, 5 - fan speed
 	}
 	return this;
 }
 
 SCREEN* pidSCREEN::menu_long(void) {
 	bool on = pHG->isOn();
+	if(temp_set==0) pHG->fixPower(pHG->_p);  // for step input unit test
 	pHG->switchPower(!on);
 	if (on)
 	Serial.println(F("The air gun is OFF"));
@@ -1778,13 +1833,13 @@ tuneSCREEN   tuneScr(&hg, &disp, &rotEncoder, &simpleBuzzer);
 errorSCREEN  errScr(&hg,  &disp, &simpleBuzzer);
 pidSCREEN    pidScr(&hg,  &rotEncoder);
 
-SCREEN   *pCurrentScreen = &offScr;
-// SCREEN   *pCurrentScreen = &pidScr;
+// SCREEN   *pCurrentScreen = &offScr;
+SCREEN   *pCurrentScreen = &pidScr;
 
 volatile bool  end_of_power_period = false;
 
 volatile uint16_t readFlag;
-volatile uint16_t analogVal;
+// volatile uint16_t analogVal;
 //HISTORY n_temp;
 
  ISR(TIMER2_COMPA_vect) {
@@ -1877,19 +1932,6 @@ void loop() {
 		}
 	}
 
-	if(readFlag) {
-		readFlag = 0;
-		sum = sum - Qtemp[index];
-		Qtemp[index] = analogVal;
-		sum = sum + analogVal;
-		index++;
-		if (index >= H_LENGTH) {
-			index = 0;
-			Qtemp_average = (sum+8)/H_LENGTH;
-			hg.h_temp.put(Qtemp_average);
-		}
-	}
-
 	SCREEN* nxt = pCurrentScreen->reedSwitch(reedSwitch.status());
 	if (nxt != pCurrentScreen) {
 		pCurrentScreen = nxt;
@@ -1897,7 +1939,7 @@ void loop() {
 		reset_encoder = true;
 		return;
 	}
-	
+
 	uint8_t bStatus = rotButton.buttonCheck();
 	switch (bStatus) {
 	case 2:                                      // long press;
@@ -1928,6 +1970,20 @@ void loop() {
 		reset_encoder = true;
 	}
 	
+	if(readFlag) {
+		readFlag = 0;
+		hg.h_temp.put(analogVal);
+		// sum = sum - Qtemp[index];
+		// Qtemp[index] = analogVal;
+		// sum = sum + analogVal;
+		// index++;
+		// if (index >= H_LENGTH) {
+			// index = 0;
+			// Qtemp_average = (sum+8)/H_LENGTH;
+			// hg.h_temp.put(Qtemp_average);
+		// }
+	}
+
 	if (end_of_power_period) {                   // Calculate the required power
 		hg.keepTemp();
 		end_of_power_period = false;
