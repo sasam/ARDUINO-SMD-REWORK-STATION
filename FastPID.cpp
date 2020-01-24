@@ -12,10 +12,10 @@ void FastPID::clear() {
   _last_err = 0;
 }
 
-bool FastPID::setCoefficients(float kp, float ki, float kd, float hz) {
-  _p = floatToParam(kp);
-  _i = floatToParam(ki / hz);
-  _d = floatToParam(kd * hz);
+bool FastPID::setCoefficients(uint32_t kp, uint32_t ki, uint32_t kd) {
+  _p = kp;
+  _i = ki;
+  _d = kd;
   return ! _cfg_err;
 }
 
@@ -52,36 +52,20 @@ bool FastPID::setOutputRange(int16_t min, int16_t max)
   return ! _cfg_err;
 }
 
-bool FastPID::configure(float kp, float ki, float kd, float hz, int bits, bool sign) {
+bool FastPID::configure(uint32_t kp, uint32_t ki, uint32_t kd, int bits, bool sign) {
   clear();
   _cfg_err = false;
-  setCoefficients(kp, ki, kd, hz);
+  setCoefficients(kp, ki, kd);
   setOutputConfig(bits, sign);
   return ! _cfg_err; 
-}
-
-uint32_t FastPID::floatToParam(float in) {
-  if (in > PARAM_MAX || in < 0) {
-    _cfg_err = true;
-    return 0;
-  }
-
-  uint32_t param = in * PARAM_MULT;
-
-  if (in != 0 && param == 0) {
-    _cfg_err = true;
-    return 0;
-  }
-  
-  return param;
 }
 
 int16_t FastPID::step(int16_t sp, int16_t fb) {
 
   // int16 + int16 = int17
   int32_t err = int32_t(sp) - int32_t(fb);
-  int32_t P = 0, I = 0;
-  int32_t D = 0;
+  // int32_t P = 0, I = 0, D = 0;
+  P = 0, I = 0, D = 0;
 
   if (_p) {
     // uint16 * int16 = int32
@@ -121,11 +105,6 @@ int16_t FastPID::step(int16_t sp, int16_t fb) {
   // int32 (P) + int32 (I) + int32 (D) = int34
   int64_t out = int64_t(P) + int64_t(I) + int64_t(D);
   
-	// Serial.print(P);Serial.print(", ");
-	// Serial.print(I);Serial.print(", ");
-	// Serial.print(D);Serial.print("=>");
-	// Serial.println(P+I+D);
-
   // Make the output saturate
   if (out > _outmax) 
     out = _outmax;

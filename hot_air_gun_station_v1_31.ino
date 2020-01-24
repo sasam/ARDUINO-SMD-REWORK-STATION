@@ -640,125 +640,31 @@ float HISTORY::dispersion(void) {
 }
 
 //------------------------------------------ class PID algoritm to keep the temperature -----------------------
-/*  The PID algorithm 
-*   Un = Kp*(Xs - Xn) + Ki*summ{j=0; j<=n}(Xs - Xj) + Kd(Xn - Xn-1),
-*   Where Xs - is the setup temperature, Xn - the temperature on n-iteration step
-*   In this program the interactive formula is used:
-*     Un = Un-1 + Kp*(Xn-1 - Xn) + Ki*(Xs - Xn) + Kd*(Xn-2 + Xn - 2*Xn-1)
-*   With the first step:
-*   U0 = Kp*(Xs - X0) + Ki*(Xs - X0); Xn-1 = Xn;
-*   
-*   PID coefficients history:
-*   10/14/2017  [ 768,   32, 328]
-*   V1.0        [ 638,  196,   1]
-*   11/27/2019  [2009, 1600,  20]
+
+/*
+*   PID coefficients history (11)          (9)
+*   10/14/2017  [ 768,   32, 328]  192   8 82
+*   V1.0        [ 638,  196,   1]  159  49  0
+*   11/27/2019  [2009, 1600,  20]  502 400  5
 */
-/* class PID {
-public:
-	PID(void) {
-		Kp =  768; // 0.375         96
-		Ki =   32; // 0.015625‬       4
-		Kd =  328; // 0.16015625‬    41
-
-	// Kp =  638; // 0.3115234375  79
-	// Ki =  196; // 0.095703125   24
-	// Kd =    1; // 0.00048828125  0
-
-	// Kp = 2009; // 0.98095703125
-	// Ki = 1600; // 0.78125‬
-	// Kd =   20; // 0.00048828125
-	}
-	void resetPID(int temp = -1);                // reset PID algorithm history parameters      
-	// Calculate the power to be applied
-	long reqPower(int temp_set, int temp_curr); 
-	int  changePID(uint8_t p, int k);            // set or get (if parameter < 0) PID parameter
-private:
-	void  debugPID(int t_set, int t_curr, long kp, long ki, long kd, long delta_p);
-	int   temp_h0, temp_h1;                      // previously measured temperature
-	bool  pid_iterate;                           // Whether the iterative process is used
-	int64_t  i_summ;                             // Ki summary multiplied by denominator
-	long  power;                                 // The power iterative multiplied by denominator
-	long  Kp, Ki, Kd;                            // The PID algorithm coefficients multiplied by denominator
-	const byte denominator_p = 11;               // The common coefficient denominator power of 2 (11 means divide by 2048)
-};
-
-void PID::resetPID(int temp) {
-	temp_h0 = 0;
-	power  = 0;
-	i_summ = 0;
-	pid_iterate = false;
-	if ((temp > 0) && (temp < 1000))
-		temp_h1 = temp;
-	else
-		temp_h1 = 0;
-}
-
-int PID::changePID(uint8_t p, int k) {
-	switch (p) {
-	case 1:
-		if (k >= 0) Kp = k;
-		return Kp;
-	case 2:
-		if (k >= 0) Ki = k;
-		return Ki;
-	case 3:
-		if (k >= 0) Kd = k;
-		return Kd;
-	default:
-		break;
-	}
-	return 0;
-}
-
-long PID::reqPower(int temp_set, int temp_curr) {
-	if (temp_h0 == 0) {
-		// When the temperature is near the preset one, reset the PID and prepare iterative formula
-		if ((temp_set - temp_curr) < 30) {
-			if (!pid_iterate) {
-				pid_iterate = true;
-				power = 0;
-				i_summ = 0;
-			}
-		}
-		i_summ += temp_set - temp_curr;      // first, use the direct formula, not the iterate process
-		power = Kp*(temp_set - temp_curr) + Ki*i_summ;
-		// If the temperature is near, prepare the PID iteration process
-	} else {
-        long kp = Kp * (temp_h1 - temp_curr);
-        long ki = Ki * (temp_set - temp_curr);
-        long kd = Kd * (temp_h0 + temp_curr - 2*temp_h1);
-        long delta_p = kp + ki + kd;
-        power += delta_p;		// power kept multiplied by denominator!
-	}
-	if (pid_iterate) temp_h0 = temp_h1;
-	temp_h1 = temp_curr;
-	long pwr = power + (1 << (denominator_p-1));    // prepare the power to delete by denominator, round the result
-	pwr >>= denominator_p;                          // delete by the denominator
-	return pwr;
-} */
 
 class PID : public FastPID {
 public:
 
-#define  Kp 0.296875
-#define  Ki 0.0546875
-#define  Kd 0.0
+// #define PARAM_SHIFT  9 => 512 scale factor
+#define  Kp 152
+#define  Ki 28
+#define  Kd 0
 
-	PID (void) : FastPID(Kp, Ki, Kd, 1, 8, false)  { }
-
+	PID (void) : FastPID(Kp, Ki, Kd, 8, false)  { }
 	void resetPID(void) {
 		clear();
-		// setOutputRange(0,255);
-	}                // reset PID algorithm history parameters
+	}                  // reset PID algorithm history parameters
 	uint8_t reqPower(int temp_set, int temp_curr) {
 		return step(temp_set, temp_curr);
 	}
 	int  changePID(uint8_t p, int k);
 };
-
-// void PID::resetPID(int temp) {
-	// clear();
-// }
 
 int PID::changePID(uint8_t p, int k) {
 	switch (p) {
@@ -986,14 +892,13 @@ void HOTGUN::keepTemp(void) {
 //	 uint16_t temp = n_temp.average();
 //  uint16_t temp = Qtemp_average;
 //  h_temp.put(temp);
-     int16_t temp = h_temp.average();
-//	 int16_t temp = analogVal;
+	int16_t temp = h_temp.average();
+	 // int16_t temp = analogVal;
 	
 	if ((temp >= int_temp_max + 30) || (temp > (temp_set + 100))) {   // Prevent global over heating
 		if (mode == POWER_ON) chill = true;                            // Turn off the power in main working mode only; 
 	}
 
-	// long p = 0;
 	uint8_t p = 0;
 	switch (mode) {
 	case POWER_OFF:
@@ -1695,7 +1600,7 @@ private:
 	uint8_t     mode;                   // Which parameter to tune [0-5]: select element, Kp, Ki, Kd, temp, speed
 	uint32_t    update_screen;          // Time in ms when to print thee info
 	int         temp_set;
-	const uint16_t period = 500; //1100;
+	const uint16_t period = 1000; //1100;
 };
 
 void pidSCREEN::init(void) {
@@ -1732,6 +1637,7 @@ void pidSCREEN::rotaryValue(int16_t value) {
 		case 1:
 			Serial.print(F("Kp = "));
 			pHG->changePID(mode, value);
+			if(temp_set==0) pHG->fixPower(pHG->_p);  // for step input unit test
 			break;
 		case 2:
 			Serial.print(F("Ki = "));
@@ -1767,7 +1673,8 @@ SCREEN* pidSCREEN::show(void) {
 		// uint8_t  fs    = pHG->getFanSpeed();
 		// fs = map(fs, 0, 255, 0, 100);
 		// sprintf(buff, "%3d,%3d,%3d,", temp_set, temp, pHG->cnt  );
-		sprintf(buff, "%3d,%3d,%3d,%3d,", temp_set, temp, pwr, Apwr );
+		// sprintf(buff, "%3d,%3d,%3d,%3d,%3d,%3d", temp_set, temp, pwr,pHG->P,pHG->I,pHG->D);
+		sprintf(buff, "%3d,%3d,%ld,%ld,%ld", temp, pwr,pHG->P,pHG->I,pHG->D);
 		Serial.println(buff);
 	 }
 	return this;
@@ -1796,9 +1703,11 @@ SCREEN* pidSCREEN::menu_long(void) {
 	if(temp_set==0) pHG->fixPower(pHG->_p);  // for step input unit test
 	pHG->switchPower(!on);
 	if (on)
-	Serial.println(F("The air gun is OFF"));
-	else
-	Serial.println(F("The air gun is ON"));
+		Serial.println(F("The air gun is OFF"));
+	else {
+		Serial.println(F("The air gun is ON"));
+		pHG->resetPID();
+	}
 	return this;
 }
 
@@ -1833,8 +1742,8 @@ tuneSCREEN   tuneScr(&hg, &disp, &rotEncoder, &simpleBuzzer);
 errorSCREEN  errScr(&hg,  &disp, &simpleBuzzer);
 pidSCREEN    pidScr(&hg,  &rotEncoder);
 
-// SCREEN   *pCurrentScreen = &offScr;
-SCREEN   *pCurrentScreen = &pidScr;
+SCREEN   *pCurrentScreen = &offScr;
+// SCREEN   *pCurrentScreen = &pidScr;
 
 volatile bool  end_of_power_period = false;
 
